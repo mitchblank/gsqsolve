@@ -19,6 +19,12 @@ $ ./gsqsolve --verify-all
 ```
 If no errors are detected it will simply exit quietly.
 
+It's also possible to iterate all possible dice values and count how
+many solutions each of them has:
+```
+$ ./gsqsolve --solution-counts | sort -n | less
+```
+
 Finally, if you just want to see it solve a random board position:
 ```
 $ ./gsqsolve --random

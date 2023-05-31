@@ -20,6 +20,11 @@
 //
 // If no errors are detected it will simply exit quietly.
 //
+// It's also possible to iterate all possible dice values and count how
+// many solutions each of them has:
+//
+//   $ ./gsqsolve --solution-counts | sort -n | less
+//
 // Finally, if you just want to see it solve a random board position:
 //
 //   $ ./gsqsolve --random
@@ -553,6 +558,9 @@ class board {
 	// Returns false if none was found.
 	[[nodiscard]] auto solve() noexcept -> bool;
 
+	// Count all of the possible solutions for a board position
+	[[nodiscard]] auto count_solutions() noexcept -> unsigned;
+
 	// Print out the board in ANSI color
 	auto print() const noexcept -> void;
 
@@ -618,76 +626,88 @@ class filtered_shape {
 	unsigned count_;
 };
 
-auto board::solve() noexcept -> bool
-{
-	board_bitmask_t used = this->blockers_;
+// For each shape, make an on-stack array that only includes
+// the shapes that don't conflict with the blockers.  i.e.
+// remove all of the shapes that will never fit on this board,
+// event by themselves.
+#define MAKE_FILTERED_SHAPE(shape, blockers)	\
+	filtered_shape<std::size(shape)> const filtered_##shape(shape, blockers)
 
-	// For each shape, make an on-stack array that only includes
-	// the shapes that don't conflict with the blockers.  i.e.
-	// remove all of the shapes that will never fit on this board,
-	// event by themselves.
-#define MAKE_FILTERED_SHAPE(shape)	\
-	filtered_shape<std::size(shape)> const filtered_##shape(shape, used)
+#define SHAPE_LOOP_START(shape)						\
+	for (auto const t_##shape : filtered_##shape.elements()) {	\
+		if ((t_##shape & used) == 0) {				\
+			this->shape##_ = t_##shape;			\
+			used += t_##shape
 
-	MAKE_FILTERED_SHAPE(line4);
-	MAKE_FILTERED_SHAPE(square2_2);
-	MAKE_FILTERED_SHAPE(lblock3);
-	MAKE_FILTERED_SHAPE(zblock);
-	MAKE_FILTERED_SHAPE(tblock);
-	MAKE_FILTERED_SHAPE(line3);
-	MAKE_FILTERED_SHAPE(lblock2);
-	MAKE_FILTERED_SHAPE(line2);
-#undef MAKE_FILTERED_SHAPE
+#define SHAPE_LOOP_END(shape)						\
+			used -= t_##shape;				\
+		}							\
+	}								\
+	do { } while (0)
 
-	// We don't use SHAPE_LOOP_START() for "line4" since we've
-	// already removed any elements that conflicted with the
-	// blockers, so there is no need for another if()
-	for (auto const t_line4 : filtered_line4.elements()) {
-		this->line4_ = t_line4;
-		used += t_line4;
-
-#define SHAPE_LOOP_START(shape)							\
-		for (auto const t_##shape : filtered_##shape.elements()) {	\
-			if ((t_##shape & used) == 0) {				\
-				this->shape##_ = t_##shape;			\
-				used += t_##shape
-
-#define SHAPE_LOOP_END(shape)							\
-				used -= t_##shape;				\
+// We don't use SHAPE_LOOP_START() for "line4" since we've
+// already removed any elements that conflicted with the
+// blockers, so there is no need for another if()
+#define SOLVE_BOARD(solved_action)						\
+do {										\
+	board_bitmask_t used = this->blockers_;					\
+										\
+	MAKE_FILTERED_SHAPE(line4, used);					\
+	MAKE_FILTERED_SHAPE(square2_2, used);					\
+	MAKE_FILTERED_SHAPE(lblock3, used);					\
+	MAKE_FILTERED_SHAPE(zblock, used);					\
+	MAKE_FILTERED_SHAPE(tblock, used);					\
+	MAKE_FILTERED_SHAPE(line3, used);					\
+	MAKE_FILTERED_SHAPE(lblock2, used);					\
+	MAKE_FILTERED_SHAPE(line2, used);					\
+										\
+	for (auto const t_line4 : filtered_line4.elements()) {			\
+		this->line4_ = t_line4;						\
+		used += t_line4;						\
+										\
+		SHAPE_LOOP_START(square2_2);					\
+		SHAPE_LOOP_START(lblock3);					\
+		SHAPE_LOOP_START(zblock);					\
+		SHAPE_LOOP_START(tblock);					\
+		SHAPE_LOOP_START(line3);					\
+		SHAPE_LOOP_START(lblock2);					\
+										\
+		for (auto const t_line2 : filtered_line2.elements()) {		\
+			if ((t_line2 & used) == 0) {				\
+				this->line2_ = t_line2;				\
+				assert_consistent_();				\
+				solved_action;					\
 			}							\
 		}								\
-		do { } while (0)
+										\
+		SHAPE_LOOP_END(lblock2);					\
+		SHAPE_LOOP_END(line3);						\
+		SHAPE_LOOP_END(tblock);						\
+		SHAPE_LOOP_END(zblock);						\
+		SHAPE_LOOP_END(lblock3);					\
+		SHAPE_LOOP_END(square2_2);					\
+										\
+		used -= t_line4;						\
+	}									\
+} while (0)
 
-		SHAPE_LOOP_START(square2_2);
-		SHAPE_LOOP_START(lblock3);
-		SHAPE_LOOP_START(zblock);
-		SHAPE_LOOP_START(tblock);
-		SHAPE_LOOP_START(line3);
-		SHAPE_LOOP_START(lblock2);
-
-		for (auto const t_line2 : filtered_line2.elements()) {
-			if ((t_line2 & used) == 0) {
-				this->line2_ = t_line2;
-				assert_consistent_();
-				return true;
-			}
-		}
-
-		SHAPE_LOOP_END(lblock2);
-		SHAPE_LOOP_END(line3);
-		SHAPE_LOOP_END(tblock);
-		SHAPE_LOOP_END(zblock);
-		SHAPE_LOOP_END(lblock3);
-		SHAPE_LOOP_END(square2_2);
-
-#undef SHAPE_LOOP_START
-#undef SHAPE_LOOP_END
-
-		used -= t_line4;
-	}
-
+auto board::solve() noexcept -> bool
+{
+	SOLVE_BOARD(return true);
 	[[unlikely]] return false;
 }
+
+auto board::count_solutions() noexcept -> unsigned
+{
+	unsigned count = 0;
+	SOLVE_BOARD(count++);
+	return count;
+}
+
+#undef MAKE_FILTERED_SHAPE
+#undef SHAPE_LOOP_START
+#undef SHAPE_LOOP_END
+#undef SOLVE_BOARD
 
 #ifndef NDEBUG
 auto board::assert_consistent_() const noexcept -> void
@@ -768,12 +788,42 @@ auto board::print() const noexcept -> void
 	return ok;
 }
 
+static auto show_solution_count_for(board_bitmask_t blockers) noexcept -> void
+{
+	assert(blockers_are_valid_roll(blockers));
+	board b(blockers);
+	printf("%u\t", b.count_solutions());
+	char const *before = "";
+	for (unsigned row = 0; row < 6; row++) {
+		for (unsigned col = 0; col < 6; col++) {
+			if ((sbit(row, col) & blockers) != 0) {
+				printf("%s%c%u", before, 'A' + row, col + 1);
+				before = " ";
+			}
+		}
+	}
+	putchar('\n');
+}
+
+static auto count_solutions_of_every_board_position() noexcept -> void
+{
+	for (auto const d0 : unique_faces_0)
+		for (auto const d1 : unique_faces_1)
+			for (auto const d2 : unique_faces_2)
+				for (auto const d3 : unique_faces_3)
+					for (auto const d4 : unique_faces_4)
+						for (auto const d5 : unique_faces_5)
+							for (auto const d6 : unique_faces_6)
+								show_solution_count_for(d0 | d1 | d2 | d3 | d4 | d5 | d6);
+}
+
 static auto usage(FILE *fp) noexcept -> void
 {
 	fputs(	"Usage:\n"
 		"\t"	"gsqsolve <die_1> <die_2> ... <die_7>\n"
 		"\t"	"sqsolve --random [count]\n"
-		"\t"	"gsqsolve --verify-all\n", fp);
+		"\t"	"gsqsolve --verify-all\n"
+		"\t"	"gsqsolve --solution-counts\n", fp);
 }
 
 } // anonymous namespace
@@ -788,6 +838,10 @@ auto main(int argn, char const * const *argv) noexcept -> int
 		}
 		if (0 == strcmp(arg, "--verify-all"))
 			return verify_all_possible_rolls() ? EX_OK : 1;
+		if (0 == strcmp(arg, "--solution-counts")) {
+			count_solutions_of_every_board_position();
+			return EX_OK;
+		}
 	}
 	if (argn >= 2 and argn <= 3 and 0 == strcmp(argv[1], "--random")) {
 		std::srand(static_cast<unsigned>(std::time(nullptr)));
