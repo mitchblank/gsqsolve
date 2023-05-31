@@ -179,11 +179,11 @@ static constinit board_bitmask_t line2[] = {
 //          X
 [[nodiscard]] static auto consteval line3_h_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row, col + 1) | sbit(row, col + 2);
+	return line2_h_at(row, col) | sbit(row, col + 2);
 }
 [[nodiscard]] static auto consteval line3_v_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row + 1, col) | sbit(row + 2, col);
+	return line2_v_at(row, col) | sbit(row + 2, col);
 }
 
 static constinit board_bitmask_t line3[] = {
@@ -207,11 +207,11 @@ static constinit board_bitmask_t line3[] = {
 //           X
 [[nodiscard]] static auto consteval line4_h_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row, col + 1) | sbit(row, col + 2) | sbit(row, col + 3);
+	return line3_h_at(row, col) | sbit(row, col + 3);
 }
 [[nodiscard]] static auto consteval line4_v_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row + 1, col) | sbit(row + 2, col) | sbit(row + 3, col);
+	return line3_v_at(row, col) | sbit(row + 3, col);
 }
 
 static constinit board_bitmask_t line4[] = {
@@ -232,19 +232,19 @@ static constinit board_bitmask_t line4[] = {
 //   XX    XX     X    X
 [[nodiscard]] static auto consteval lblock2_ul_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row + 1, col) | sbit(row, col + 1) | sbit(row + 1, col + 1);
+	return line2_h_at(row + 1, col) | sbit(row, col + 1);
 }
 [[nodiscard]] static auto consteval lblock2_ur_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row + 1, col) | sbit(row + 1, col + 1);
+	return line2_h_at(row + 1, col) | sbit(row, col);
 }
 [[nodiscard]] static auto consteval lblock2_bl_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row, col + 1) | sbit(row + 1, col + 1);
+	return line2_h_at(row, col) | sbit(row + 1, col + 1);
 }
 [[nodiscard]] static auto consteval lblock2_br_at(unsigned row, unsigned col) noexcept -> board_bitmask_t
 {
-	return sbit(row, col) | sbit(row + 1, col) | sbit(row, col + 1);
+	return line2_h_at(row, col) | sbit(row + 1, col);
 }
 
 static constinit board_bitmask_t lblock2[] = {
