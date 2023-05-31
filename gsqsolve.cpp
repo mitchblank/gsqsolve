@@ -35,6 +35,7 @@
 #include <cstring>
 #include <ctime>
 #include <array>
+#include <span>
 #include <sysexits.h>
 
 namespace {
@@ -590,50 +591,98 @@ class board {
 #endif // !NDEBUG
 };
 
+// Object which holds the elements from a "shape" array, but with the elements
+// that conflict with the 'blockers' removed
+template<unsigned MAX_SIZE>
+class filtered_shape {
+    public:
+	filtered_shape(std::span<const board_bitmask_t> shape, board_bitmask_t blockers) noexcept
+		: count_(0)
+	{
+		for (auto const e : shape)
+			if ((e & blockers) == 0)
+				arr_[count_++] = e;
+		assert(count_ <= arr_.size());
+	}
+
+	[[nodiscard]] auto elements() const noexcept -> std::span<const board_bitmask_t>
+	{
+		return std::span<const board_bitmask_t>(arr_.cbegin(), count_);
+	}
+    private:
+	std::array<board_bitmask_t, MAX_SIZE> arr_;
+	unsigned count_;
+};
+
 auto board::solve() noexcept -> bool
 {
 	board_bitmask_t used = this->blockers_;
 
-#define SHAPE_LOOP_START(shape)	\
-	for (auto const t_##shape : shape) {		\
-		if ((t_##shape & used) == 0) {		\
-			this->shape##_ = t_##shape;	\
-			used += t_##shape
+	// For each shape, make an on-stack array that only includes
+	// the shapes that don't conflict with the blockers.  i.e.
+	// remove all of the shapes that will never fit on this board,
+	// event by themselves.
+#define MAKE_FILTERED_SHAPE(shape)	\
+	filtered_shape<std::size(shape)> const filtered_##shape(shape, used)
 
-#define SHAPE_LOOP_END(shape)				\
-			used -= t_##shape;		\
-		}					\
-	}						\
-	do { } while (0)
+	MAKE_FILTERED_SHAPE(line4);
+	MAKE_FILTERED_SHAPE(square2_2);
+	MAKE_FILTERED_SHAPE(lblock3);
+	MAKE_FILTERED_SHAPE(zblock);
+	MAKE_FILTERED_SHAPE(tblock);
+	MAKE_FILTERED_SHAPE(line3);
+	MAKE_FILTERED_SHAPE(lblock2);
+	MAKE_FILTERED_SHAPE(line2);
+#undef MAKE_FILTERED_SHAPE
 
-	SHAPE_LOOP_START(line4);
-	SHAPE_LOOP_START(square2_2);
-	SHAPE_LOOP_START(lblock3);
-	SHAPE_LOOP_START(zblock);
-	SHAPE_LOOP_START(tblock);
-	SHAPE_LOOP_START(line3);
-	SHAPE_LOOP_START(lblock2);
+	// We don't use SHAPE_LOOP_START() for "line4" since we've
+	// already removed any elements that conflicted with the
+	// blockers, so there is no need for another if()
+	for (auto const t_line4 : filtered_line4.elements()) {
+		this->line4_ = t_line4;
+		used += t_line4;
 
-	for (auto const t_line2 : line2) {
-		if ((t_line2 & used) == 0) {
-			this->line2_ = t_line2;
+#define SHAPE_LOOP_START(shape)							\
+		for (auto const t_##shape : filtered_##shape.elements()) {	\
+			if ((t_##shape & used) == 0) {				\
+				this->shape##_ = t_##shape;			\
+				used += t_##shape
+
+#define SHAPE_LOOP_END(shape)							\
+				used -= t_##shape;				\
+			}							\
+		}								\
+		do { } while (0)
+
+		SHAPE_LOOP_START(square2_2);
+		SHAPE_LOOP_START(lblock3);
+		SHAPE_LOOP_START(zblock);
+		SHAPE_LOOP_START(tblock);
+		SHAPE_LOOP_START(line3);
+		SHAPE_LOOP_START(lblock2);
+
+		for (auto const t_line2 : filtered_line2.elements()) {
+			if ((t_line2 & used) == 0) {
+				this->line2_ = t_line2;
 #ifndef NDEBUG
-			assert_consistent_();
+				assert_consistent_();
 #endif // !NDEBUG
-			return true;
+				return true;
+			}
 		}
-	}
 
-	SHAPE_LOOP_END(lblock2);
-	SHAPE_LOOP_END(line3);
-	SHAPE_LOOP_END(tblock);
-	SHAPE_LOOP_END(zblock);
-	SHAPE_LOOP_END(lblock3);
-	SHAPE_LOOP_END(square2_2);
-	SHAPE_LOOP_END(line4);
+		SHAPE_LOOP_END(lblock2);
+		SHAPE_LOOP_END(line3);
+		SHAPE_LOOP_END(tblock);
+		SHAPE_LOOP_END(zblock);
+		SHAPE_LOOP_END(lblock3);
+		SHAPE_LOOP_END(square2_2);
 
 #undef SHAPE_LOOP_START
 #undef SHAPE_LOOP_END
+
+		used -= t_line4;
+	}
 
 	[[unlikely]] return false;
 }
