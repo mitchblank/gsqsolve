@@ -96,71 +96,71 @@ class blocker_die : public std::array<board_bitmask_t, 6> {
 		// bringing in a lot of extra STL code:
 		return (*this)[static_cast<unsigned>(std::rand()) % this->size()];
 	}
+
+	// Return a possibly-smaller array containing just the values of the unique faces.
+	// This is used by the "--verify-all" code when producing all possible rolls.
+	// Caller is responsible for specifying a large-enough destination size
+	// via a template parameter.
+	template<unsigned DEST_ARRAY_SIZE>
+	[[nodiscard]] auto consteval without_dups_sized() const noexcept -> std::array<board_bitmask_t, DEST_ARRAY_SIZE>
+	{
+		std::array<board_bitmask_t, DEST_ARRAY_SIZE> rv;
+		unsigned used = 0;
+
+		rv.fill(0);
+		for (auto const v : *this)
+			for (unsigned i = 0;; i++) {
+				if (i >= used) {
+					rv[used++] = v;
+					break;
+				}
+				if (rv[i] == v)
+					break;
+			}
+		return rv;
+	}
+
+	// Returns the number of unique faces on the die
+	[[nodiscard]] auto consteval num_unique_faces() const noexcept -> unsigned
+	{
+		auto const uniq = without_dups_sized<6>();
+		unsigned i = 0;
+
+		for (auto const v : uniq) {
+			if (v == 0)
+				break;
+			i++;
+		}
+		return i;
+	}
 };
 
 // Dice values, per https://www.reddit.com/r/boardgames/comments/kxt1q3/comment/gjc5m2n/
-#define FOREACH_DICE_VALUE(macro)	\
-	macro(0, "A1 C1 D1 D2 E2 F3")	\
-	macro(1, "A2 B2 C2 A3 B1 B3")	\
-	macro(2, "C3 D3 E3 B4 C4 D4")	\
-	macro(3, "E1 F2 F2 B6 A5 A5")	\
-	macro(4, "A4 B5 C6 C5 D6 F6")	\
-	macro(5, "E4 F4 E5 F5 D5 E6")	\
-	macro(6, "F1 F1 F1 A6 A6 A6")
-
-// Array holding all 7 dice
-static constinit std::array<blocker_die, 7> blocker_dice = {
-#define ONE_DIE(n, str)	str,
-	FOREACH_DICE_VALUE(ONE_DIE)
-#undef ONE_DIE
+static constexpr std::array<blocker_die, 7> blocker_dice = {
+	"A1 C1 D1 D2 E2 F3",
+	"A2 B2 C2 A3 B1 B3",
+	"C3 D3 E3 B4 C4 D4",
+	"E1 F2 F2 B6 A5 A5",
+	"A4 B5 C6 C5 D6 F6",
+	"E4 F4 E5 F5 D5 E6",
+	"F1 F1 F1 A6 A6 A6",
 };
-
-// Given a set of 6 die faces, return a possibly-smaller array containing
-// just the unique values.  This is used by the "--verify-all" code when
-// producing all possible rolls.  Caller is responsible for specifying a
-// large-enough destination size via a template parameter.
-template<unsigned DEST_ARRAY_SIZE>
-[[nodiscard]] static auto consteval without_dups_sized(std::array<board_bitmask_t, 6> arr) noexcept -> std::array<board_bitmask_t, DEST_ARRAY_SIZE>
-{
-	std::array<board_bitmask_t, DEST_ARRAY_SIZE> rv;
-	unsigned used = 0;
-
-	rv.fill(0);
-	for (auto const v : arr)
-		for (unsigned i = 0;; i++) {
-			if (i >= used) {
-				rv[used++] = v;
-				break;
-			}
-			if (rv[i] == v)
-				break;
-		}
-	return rv;
-}
-
-// Given the string description of one die, return how many unique faces it has
-[[nodiscard]] static auto consteval count_unique_dice_values(char const *str) noexcept -> unsigned
-{
-	auto const uniq = without_dups_sized<6>(parse_dice_values(str));
-	unsigned i = 0;
-
-	for (auto const v : uniq) {
-		if (v == 0)
-			break;
-		i++;
-	}
-	return i;
-}
 
 // Define a "unique_faces_<n>" variable for each of the seven dice.  We
 // go through a lot of effort to size each array at compile-time so that
 // the run-time iteration code can be as simple as possible.
-#define ONE_DIE(n, str)	static constinit auto unique_faces_##n = without_dups_sized<count_unique_dice_values(str)>(parse_dice_values(str));
-FOREACH_DICE_VALUE(ONE_DIE)
-#undef ONE_DIE
+#define MAKE_UNIQUE_FACES(n) static constexpr auto unique_faces_##n = blocker_dice[n].without_dups_sized<blocker_dice[n].num_unique_faces()>()
+MAKE_UNIQUE_FACES(0);
+MAKE_UNIQUE_FACES(1);
+MAKE_UNIQUE_FACES(2);
+MAKE_UNIQUE_FACES(3);
+MAKE_UNIQUE_FACES(4);
+MAKE_UNIQUE_FACES(5);
+MAKE_UNIQUE_FACES(6);
+#undef MAKE_UNIQUE_FACES
 
 // Given a bitmask with (up to) 7 bits set, check that it could have
-// actually resulted from a dice roll:
+// actually resulted from a dice roll6
 [[nodiscard]] static auto blockers_are_valid_roll(board_bitmask_t blockers)
 {
 	unsigned saw_die = 0;
@@ -199,7 +199,7 @@ FOREACH_DICE_VALUE(ONE_DIE)
 	return sbit(row, col) | sbit(row + 1, col) | sbit(row, col + 1) | sbit(row + 1, col + 1);
 }
 
-static constinit board_bitmask_t square2_2[] = {
+static constexpr board_bitmask_t square2_2[] = {
 	square2_2_at(0, 0), square2_2_at(0, 1), square2_2_at(0, 2), square2_2_at(0, 3), square2_2_at(0, 4),
 	square2_2_at(1, 0), square2_2_at(1, 1), square2_2_at(1, 2), square2_2_at(1, 3), square2_2_at(1, 4),
 	square2_2_at(2, 0), square2_2_at(2, 1), square2_2_at(2, 2), square2_2_at(2, 3), square2_2_at(2, 4),
@@ -219,7 +219,7 @@ static constinit board_bitmask_t square2_2[] = {
 	return sbit(row, col) | sbit(row + 1, col);
 }
 
-static constinit board_bitmask_t line2[] = {
+static constexpr board_bitmask_t line2[] = {
 	line2_h_at(0, 0), line2_h_at(0, 1), line2_h_at(0, 2), line2_h_at(0, 3), line2_h_at(0, 4),
 	line2_h_at(1, 0), line2_h_at(1, 1), line2_h_at(1, 2), line2_h_at(1, 3), line2_h_at(1, 4),
 	line2_h_at(2, 0), line2_h_at(2, 1), line2_h_at(2, 2), line2_h_at(2, 3), line2_h_at(2, 4),
@@ -247,7 +247,7 @@ static constinit board_bitmask_t line2[] = {
 	return line2_v_at(row, col) | sbit(row + 2, col);
 }
 
-static constinit board_bitmask_t line3[] = {
+static constexpr board_bitmask_t line3[] = {
 	line3_h_at(0, 0), line3_h_at(0, 1), line3_h_at(0, 2), line3_h_at(0, 3),
 	line3_h_at(1, 0), line3_h_at(1, 1), line3_h_at(1, 2), line3_h_at(1, 3),
 	line3_h_at(2, 0), line3_h_at(2, 1), line3_h_at(2, 2), line3_h_at(2, 3),
@@ -275,7 +275,7 @@ static constinit board_bitmask_t line3[] = {
 	return line3_v_at(row, col) | sbit(row + 3, col);
 }
 
-static constinit board_bitmask_t line4[] = {
+static constexpr board_bitmask_t line4[] = {
 	line4_h_at(0, 0), line4_h_at(0, 1), line4_h_at(0, 2),
 	line4_h_at(1, 0), line4_h_at(1, 1), line4_h_at(1, 2),
 	line4_h_at(2, 0), line4_h_at(2, 1), line4_h_at(2, 2),
@@ -308,7 +308,7 @@ static constinit board_bitmask_t line4[] = {
 	return line2_h_at(row, col) | sbit(row + 1, col);
 }
 
-static constinit board_bitmask_t lblock2[] = {
+static constexpr board_bitmask_t lblock2[] = {
 	lblock2_ul_at(0, 0), lblock2_ul_at(0, 1), lblock2_ul_at(0, 2), lblock2_ul_at(0, 3), lblock2_ul_at(0, 4),
 	lblock2_ul_at(1, 0), lblock2_ul_at(1, 1), lblock2_ul_at(1, 2), lblock2_ul_at(1, 3), lblock2_ul_at(1, 4),
 	lblock2_ul_at(2, 0), lblock2_ul_at(2, 1), lblock2_ul_at(2, 2), lblock2_ul_at(2, 3), lblock2_ul_at(2, 4),
@@ -371,7 +371,7 @@ static constinit board_bitmask_t lblock2[] = {
 	return line3_v_at(row, col) | sbit(row, col + 1);
 }
 
-static constinit board_bitmask_t lblock3[] = {
+static constexpr board_bitmask_t lblock3[] = {
 	lblock3_h_ul_at(0, 0), lblock3_h_ul_at(0, 1), lblock3_h_ul_at(0, 2), lblock3_h_ul_at(0, 3),
 	lblock3_h_ul_at(1, 0), lblock3_h_ul_at(1, 1), lblock3_h_ul_at(1, 2), lblock3_h_ul_at(1, 3),
 	lblock3_h_ul_at(2, 0), lblock3_h_ul_at(2, 1), lblock3_h_ul_at(2, 2), lblock3_h_ul_at(2, 3),
@@ -438,7 +438,7 @@ static constinit board_bitmask_t lblock3[] = {
 	return line2_v_at(row, col) | line2_v_at(row + 1, col + 1);
 }
 
-static constinit board_bitmask_t zblock[] = {
+static constexpr board_bitmask_t zblock[] = {
 	zblock_h_urbl_at(0, 0), zblock_h_urbl_at(0, 1), zblock_h_urbl_at(0, 2), zblock_h_urbl_at(0, 3),
 	zblock_h_urbl_at(1, 0), zblock_h_urbl_at(1, 1), zblock_h_urbl_at(1, 2), zblock_h_urbl_at(1, 3),
 	zblock_h_urbl_at(2, 0), zblock_h_urbl_at(2, 1), zblock_h_urbl_at(2, 2), zblock_h_urbl_at(2, 3),
@@ -483,7 +483,7 @@ static constinit board_bitmask_t zblock[] = {
 	return line3_v_at(row, col + 1) | sbit(row + 1, col);
 }
 
-static constinit board_bitmask_t tblock[] = {
+static constexpr board_bitmask_t tblock[] = {
 	tblock_h_l_at(0, 0), tblock_h_l_at(0, 1), tblock_h_l_at(0, 2), tblock_h_l_at(0, 3),
 	tblock_h_l_at(1, 0), tblock_h_l_at(1, 1), tblock_h_l_at(1, 2), tblock_h_l_at(1, 3),
 	tblock_h_l_at(2, 0), tblock_h_l_at(2, 1), tblock_h_l_at(2, 2), tblock_h_l_at(2, 3),
@@ -520,7 +520,7 @@ enum class piece_id {
 	blockers,	// White round piece
 };
 
-static constinit std::array<char const *, 10> piece_rendering = {
+static constexpr std::array<char const *, 10> piece_rendering = {
 #if 1
 #  define RENDER_BLOCK(color_num)	"\033[" #color_num "m \033[0m"
 	RENDER_BLOCK(104),
