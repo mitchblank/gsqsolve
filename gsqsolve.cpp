@@ -586,9 +586,13 @@ class board {
 	// Given a location at the board, which piece got placed there
 	auto piece_at(unsigned row, unsigned col) const noexcept -> piece_id;
 
-#ifndef NDEBUG
+#ifdef NDEBUG
+	auto assert_consistent_() const noexcept -> void
+	{
+	}
+#else // !NDEBUG
 	auto assert_consistent_() const noexcept -> void;
-#endif // !NDEBUG
+#endif // NDEBUG
 };
 
 // Object which holds the elements from a "shape" array, but with the elements
@@ -664,9 +668,7 @@ auto board::solve() noexcept -> bool
 		for (auto const t_line2 : filtered_line2.elements()) {
 			if ((t_line2 & used) == 0) {
 				this->line2_ = t_line2;
-#ifndef NDEBUG
 				assert_consistent_();
-#endif // !NDEBUG
 				return true;
 			}
 		}
