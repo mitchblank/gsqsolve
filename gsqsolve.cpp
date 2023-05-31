@@ -63,18 +63,29 @@ using board_bitmask_t = std::uint64_t;
 	[[unlikely]] return 0;
 }
 
+// Parse a specification of one die from a string listing the six board
+// positions, space separated:
+[[nodiscard]] static auto consteval parse_dice_values(char const *str) noexcept -> std::array<board_bitmask_t, 6>
+{
+	std::array<board_bitmask_t, 6> rv;
+
+	for (unsigned i = 0; i < rv.size(); i++) {
+		std::array<char, 3> const id = { str[0], str[1], '\0' };
+		auto const b = sbit(id.data());
+		// assert(b != 0);
+		rv[i] = b;
+		// assert(str[2] == (i == rv.size() - 1) ? '\0' : ' ');
+		str += 3;
+	}
+	return rv;
+}
+
+// Object describing each die
 class blocker_die : public std::array<board_bitmask_t, 6> {
     public:
-	consteval /* implicit */ blocker_die(char const *options) noexcept
+	consteval /* implicit */ blocker_die(char const *str) noexcept
+		: std::array<board_bitmask_t, 6>(parse_dice_values(str))
 	{
-		for (unsigned i = 0; i < this->size(); i++) {
-			std::array<char, 3> const id = { options[0], options[1], '\0' };
-			auto const b = sbit(id.data());
-			// assert(b != 0);
-			(*this)[i] = b;
-			// assert(options[2] == (i == this->size() - 1) ? '\0' : ' ');
-			options += 3;
-		}
 	}
 
 	[[nodiscard]] auto roll() const noexcept -> board_bitmask_t
@@ -88,15 +99,65 @@ class blocker_die : public std::array<board_bitmask_t, 6> {
 };
 
 // Dice values, per https://www.reddit.com/r/boardgames/comments/kxt1q3/comment/gjc5m2n/
+#define FOREACH_DICE_VALUE(macro)	\
+	macro(0, "A1 C1 D1 D2 E2 F3")	\
+	macro(1, "A2 B2 C2 A3 B1 B3")	\
+	macro(2, "C3 D3 E3 B4 C4 D4")	\
+	macro(3, "E1 F2 F2 B6 A5 A5")	\
+	macro(4, "A4 B5 C6 C5 D6 F6")	\
+	macro(5, "E4 F4 E5 F5 D5 E6")	\
+	macro(6, "F1 F1 F1 A6 A6 A6")
+
+// Array holding all 7 dice
 static constinit std::array<blocker_die, 7> blocker_dice = {
-	"A1 C1 D1 D2 E2 F3",
-	"A2 B2 C2 A3 B1 B3",
-	"C3 D3 E3 B4 C4 D4",
-	"E1 F2 F2 B6 A5 A5",
-	"A4 B5 C6 C5 D6 F6",
-	"E4 F4 E5 F5 D5 E6",
-	"F1 F1 F1 A6 A6 A6",
+#define ONE_DIE(n, str)	str,
+	FOREACH_DICE_VALUE(ONE_DIE)
+#undef ONE_DIE
 };
+
+// Given a set of 6 die faces, return a possibly-smaller array containing
+// just the unique values.  This is used by the "--verify-all" code when
+// producing all possible rolls.  Caller is responsible for specifying a
+// large-enough destination size via a template parameter.
+template<unsigned DEST_ARRAY_SIZE>
+[[nodiscard]] static auto consteval without_dups_sized(std::array<board_bitmask_t, 6> arr) noexcept -> std::array<board_bitmask_t, DEST_ARRAY_SIZE>
+{
+	std::array<board_bitmask_t, DEST_ARRAY_SIZE> rv;
+	unsigned used = 0;
+
+	rv.fill(0);
+	for (auto const v : arr)
+		for (unsigned i = 0;; i++) {
+			if (i >= used) {
+				rv[used++] = v;
+				break;
+			}
+			if (rv[i] == v)
+				break;
+		}
+	return rv;
+}
+
+// Given the string description of one die, return how many unique faces it has
+[[nodiscard]] static auto consteval count_unique_dice_values(char const *str) noexcept -> unsigned
+{
+	auto const uniq = without_dups_sized<6>(parse_dice_values(str));
+	unsigned i = 0;
+
+	for (auto const v : uniq) {
+		if (v == 0)
+			break;
+		i++;
+	}
+	return i;
+}
+
+// Define a "unique_faces_<n>" variable for each of the seven dice.  We
+// go through a lot of effort to size each array at compile-time so that
+// the run-time iteration code can be as simple as possible.
+#define ONE_DIE(n, str)	static constinit auto unique_faces_##n = without_dups_sized<count_unique_dice_values(str)>(parse_dice_values(str));
+FOREACH_DICE_VALUE(ONE_DIE)
+#undef ONE_DIE
 
 // Given a bitmask with (up to) 7 bits set, check that it could have
 // actually resulted from a dice roll:
@@ -640,22 +701,17 @@ auto board::print() const noexcept -> void
 
 [[nodiscard]] static auto verify_all_possible_rolls() noexcept -> bool
 {
-	// Very crude code to iterate through each possible dice roll
-	//
-	// Not only is the nesting ugly, but this also does a lot more
-	// work than is really needed because dice faces aren't unique.
-	// For instance one of the dice is really just a coin flip (F1
-	// or A6) so right there we do 3x the work needed.  However
-	// this whole routine runs in ~3s so more optimization isn't
-	// really needed.
+	// Iterate through all combinations of *unique* faces on each
+	// die.  Since some dice have the same value on multiple faces
+	// this reduces the search space a lot:
 	bool ok = true;
-	for (auto const d0 : blocker_dice[0])
-		for (auto const d1 : blocker_dice[1])
-			for (auto const d2 : blocker_dice[2])
-				for (auto const d3 : blocker_dice[3])
-					for (auto const d4 : blocker_dice[4])
-						for (auto const d5 : blocker_dice[5])
-							for (auto const d6 : blocker_dice[6])
+	for (auto const d0 : unique_faces_0)
+		for (auto const d1 : unique_faces_1)
+			for (auto const d2 : unique_faces_2)
+				for (auto const d3 : unique_faces_3)
+					for (auto const d4 : unique_faces_4)
+						for (auto const d5 : unique_faces_5)
+							for (auto const d6 : unique_faces_6)
 								if (not verify_roll(d0 | d1 | d2 | d3 | d4 | d5 | d6))
 									[[unlikely]] ok = false;
 	return ok;
