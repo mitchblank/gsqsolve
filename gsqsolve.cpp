@@ -645,6 +645,9 @@ class filtered_shape {
 	}								\
 	do { } while (0)
 
+// Common code between solve() and count_solutions()  This big macro is
+// ugly but it allows us to efficiently early-return in the former case.
+//
 // We don't use SHAPE_LOOP_START() for "line4" since we've
 // already removed any elements that conflicted with the
 // blockers, so there is no need for another if()
