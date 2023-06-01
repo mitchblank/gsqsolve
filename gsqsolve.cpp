@@ -608,7 +608,7 @@ class board {
 template<unsigned MAX_SIZE>
 class filtered_shape {
     public:
-	filtered_shape(std::span<const board_bitmask_t> shape, board_bitmask_t blockers) noexcept
+	filtered_shape(std::span<board_bitmask_t const> shape, board_bitmask_t blockers) noexcept
 		: count_(0)
 	{
 		for (auto const e : shape)
@@ -617,9 +617,9 @@ class filtered_shape {
 		assert(count_ <= arr_.size());
 	}
 
-	[[nodiscard]] auto elements() const noexcept -> std::span<const board_bitmask_t>
+	[[nodiscard]] auto elements() const noexcept -> std::span<board_bitmask_t const>
 	{
-		return std::span<const board_bitmask_t>(arr_.cbegin(), count_);
+		return std::span<board_bitmask_t const>(arr_.cbegin(), count_);
 	}
     private:
 	std::array<board_bitmask_t, MAX_SIZE> arr_;
