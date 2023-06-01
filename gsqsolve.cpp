@@ -166,7 +166,7 @@ MAKE_UNIQUE_FACES(6);
 #undef MAKE_UNIQUE_FACES
 
 // Given a bitmask with (up to) 7 bits set, check that it could have
-// actually resulted from a dice roll6
+// actually resulted from a dice roll
 [[nodiscard]] static auto blockers_are_valid_roll(board_bitmask_t blockers)
 {
 	unsigned saw_die = 0;
